@@ -1,0 +1,195 @@
+esphome:
+  name: esphome-irrigation-system
+  friendly_name: Esphome Irrigation System
+
+esp32:
+  variant: esp32
+  framework:
+    type: esp-idf
+
+preferences:
+  flash_write_interval: 15sec
+
+logger:
+  level: DEBUG
+  baud_rate: 115200
+
+# Enable Home Assistant API
+api:
+  reboot_timeout: 15min
+
+ota:
+  platform: esphome
+
+# Multicast DNS. Allows the device to be discovered on the local network by its hostname 
+# (e.g., esphome-air-purifier.local)
+mdns:
+  disabled: false
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  power_save_mode: none
+
+  manual_ip:
+    static_ip: 192.168.7.190
+    gateway: 192.168.7.1
+    subnet: 255.255.255.0
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Esphome Irrigation System"
+    password: "irrigationsystem123"
+
+captive_portal:
+
+switch:
+  - platform: gpio
+    pin: GPIO16
+    name: "Water pump"
+    id: water_pump
+    on_turn_on: 
+      then:
+        - if:
+            condition:
+              - binary_sensor.is_off: water_level_ok
+            then:
+              - delay: 1s
+              - switch.turn_off: water_pump
+
+button:
+  - platform: template
+    name: Start Watering
+    id: button_start
+    icon: "mdi:power-on"
+    on_press:
+      then:
+        - if:
+            condition:
+              - binary_sensor.is_on: water_level_ok
+            then:
+              - switch.turn_on: water_pump
+              - delay: !lambda "return id(watering_time).state*60*1000;"
+              - switch.turn_off: water_pump
+            else:
+              - switch.turn_off: water_pump
+
+  - platform: template
+    name: Stop Watering
+    id: button_stop
+    icon: "mdi:power-off"
+    on_press:
+      then:
+        - switch.turn_off: water_pump
+      
+number:
+  - platform: template
+    name: Full Distance
+    icon: mdi:arrow-collapse-vertical
+    entity_category: config
+    id: full_distance_m
+    min_value: 0.01
+    max_value: 1.50
+    initial_value: 0.1
+    optimistic: true
+    step: 0.01
+    restore_value: true
+    unit_of_measurement: meters
+    mode: box
+
+  - platform: template
+    name: Empty Distance
+    icon: mdi:arrow-expand-vertical
+    entity_category: config
+    id: empty_distance_m
+    min_value: 0.01
+    max_value: 1.50
+    initial_value: 0.1
+    optimistic: true
+    step: 0.01
+    restore_value: true
+    unit_of_measurement: meters
+    mode: box
+
+  - platform: template
+    name: Safe Level Distance
+    icon: mdi:arrow-expand-vertical
+    entity_category: config
+    id: safe_distance_m
+    min_value: 0.01
+    max_value: 1.50
+    initial_value: 0.1
+    optimistic: true
+    step: 0.01
+    restore_value: true
+    unit_of_measurement: meters
+    mode: box
+
+  - platform: template
+    name: Watering Time
+    icon: mdi:clock-edit
+    id: watering_time
+    min_value: 1
+    max_value: 60
+    initial_value: 10
+    optimistic: true
+    step: 1
+    restore_value: true
+    unit_of_measurement: minutes
+    mode: box
+
+binary_sensor:
+  - platform: template
+    name: "Water Level OK"
+    id: water_level_ok
+    lambda: |-
+      if (id(ultrasonic_sensor_distance).state < id(safe_distance_m).state) {
+        //there is enough water
+        return true;
+      } else {
+        //there is not enough water
+        return false;
+      }
+    on_state:
+      then:
+        - lambda: |-
+            if (x == false) {
+              id(water_pump).turn_off();
+            }
+        
+  - platform: template
+    name: "Pump Status"
+    id: pump_status
+    device_class: running
+    lambda: |-
+      return id(water_pump).state;
+
+sensor:
+  - platform: ultrasonic
+    trigger_pin: GPIO22
+    echo_pin: GPIO21
+    name: "Level Sensor Distance"
+    id: ultrasonic_sensor_distance
+    device_class: distance
+    update_interval: 1s
+    pulse_time: 10us
+    timeout: 20m
+    filters:
+      - sliding_window_moving_average:
+          window_size: 15
+          send_every: 15
+
+  - platform: template
+    name: "Water Level"
+    id: water_level
+    lambda: |-
+        return id(ultrasonic_sensor_distance).state;
+    update_interval: 1s
+    accuracy_decimals: 0
+    unit_of_measurement: "%"
+    filters:
+      - lambda: return ((100 - 0)/(id(full_distance_m).state - id(empty_distance_m).state)) * x + (100 - (((100 - 0)/(id(full_distance_m).state - id(empty_distance_m).state)) * id(full_distance_m).state));
+      - clamp:
+          min_value: 0
+          max_value: 100
+          ignore_out_of_range: false
