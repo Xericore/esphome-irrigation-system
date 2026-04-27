@@ -58,7 +58,7 @@ switch:
               - switch.turn_off: pump_1
 
   - platform: gpio
-    pin: GPIO28
+    pin: GPIO33
     name: "Pump 2"
     id: pump_2
     on_turn_on: 
