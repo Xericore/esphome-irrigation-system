@@ -211,8 +211,8 @@ binary_sensor:
 
 sensor:
   - platform: ultrasonic
-    trigger_pin: GPIO22
-    echo_pin: GPIO21
+    trigger_pin: GPIO13
+    echo_pin: GPIO14
     name: "Level Sensor Distance"
     id: ultrasonic_sensor_distance
     device_class: distance
