@@ -45,9 +45,9 @@ captive_portal:
 
 switch:
   - platform: gpio
-    pin: GPIO16
-    name: "Water pump"
-    id: water_pump
+    pin: GPIO26
+    name: "Pump 1"
+    id: pump_1
     on_turn_on: 
       then:
         - if:
@@ -55,7 +55,20 @@ switch:
               - binary_sensor.is_off: water_level_ok
             then:
               - delay: 1s
-              - switch.turn_off: water_pump
+              - switch.turn_off: pump_1
+
+  - platform: gpio
+    pin: GPIO28
+    name: "Pump 2"
+    id: pump_2
+    on_turn_on: 
+      then:
+        - if:
+            condition:
+              - binary_sensor.is_off: water_level_ok
+            then:
+              - delay: 1s
+              - switch.turn_off: pump_2
 
 button:
   - platform: template
@@ -68,11 +81,21 @@ button:
             condition:
               - binary_sensor.is_on: water_level_ok
             then:
-              - switch.turn_on: water_pump
-              - delay: !lambda "return id(watering_time).state*60*1000;"
-              - switch.turn_off: water_pump
+              - switch.turn_on: pump_1
+              - delay: !lambda "return id(watering_duration_1).state * 1000;"
+              - switch.turn_off: pump_1
+              - if:
+                  condition:
+                    - binary_sensor.is_on: water_level_ok
+                  then:
+                    - switch.turn_on: pump_2
+                    - delay: !lambda "return id(watering_duration_2).state * 1000;"
+                    - switch.turn_off: pump_2
+                  else:
+                    - switch.turn_off: pump_2
             else:
-              - switch.turn_off: water_pump
+              - switch.turn_off: pump_1
+              - switch.turn_off: pump_2
 
   - platform: template
     name: Stop Watering
@@ -80,7 +103,8 @@ button:
     icon: "mdi:power-off"
     on_press:
       then:
-        - switch.turn_off: water_pump
+        - switch.turn_off: pump_1
+        - switch.turn_off: pump_2
       
 number:
   - platform: template
@@ -126,16 +150,29 @@ number:
     mode: box
 
   - platform: template
-    name: Watering Time
+    name: Watering Duration 1
     icon: mdi:clock-edit
-    id: watering_time
+    id: watering_duration_1
     min_value: 1
-    max_value: 60
+    max_value: 3600
     initial_value: 10
     optimistic: true
     step: 1
     restore_value: true
-    unit_of_measurement: minutes
+    unit_of_measurement: seconds
+    mode: box
+
+  - platform: template
+    name: Watering Duration 2
+    icon: mdi:clock-edit
+    id: watering_duration_2
+    min_value: 1
+    max_value: 3600
+    initial_value: 5
+    optimistic: true
+    step: 1
+    restore_value: true
+    unit_of_measurement: seconds
     mode: box
 
 binary_sensor:
@@ -154,15 +191,23 @@ binary_sensor:
       then:
         - lambda: |-
             if (x == false) {
-              id(water_pump).turn_off();
+              id(pump_1).turn_off();
+              id(pump_2).turn_off();
             }
         
   - platform: template
-    name: "Pump Status"
-    id: pump_status
+    name: "Pump 1 Status"
+    id: pump_status_1
     device_class: running
     lambda: |-
-      return id(water_pump).state;
+      return id(pump_1).state;
+
+  - platform: template
+    name: "Pump 2 Status"
+    id: pump_status_2
+    device_class: running
+    lambda: |-
+      return id(pump_2).state;
 
 sensor:
   - platform: ultrasonic
